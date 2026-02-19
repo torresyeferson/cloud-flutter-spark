@@ -1,6 +1,8 @@
 import puntualometroLogo from "@/assets/puntualometro-logo.jpeg";
-import { Award, Download, ChevronRight, Bell, Shield, LogOut } from "lucide-react";
+import { Award, Download, ChevronRight, Bell, Shield, LogOut, Fingerprint } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useBiometric } from "@/hooks/useBiometric";
+import { toast } from "sonner";
 
 const badges = [
   { icon: "🔥", label: "Racha 10", earned: true },
@@ -20,7 +22,23 @@ const historial = [
 ];
 
 const Profile = () => {
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
+  const { isAvailable, isEnabled, register, disable } = useBiometric();
+
+  const handleToggleBiometric = async () => {
+    if (isEnabled) {
+      disable();
+      toast.success("Biométrico desactivado");
+    } else if (user) {
+      try {
+        await register(user.id, user.email || "", user.user_metadata?.full_name || "Usuario");
+        toast.success("¡Biométrico activado! Podrás ingresar con huella o Face ID.");
+      } catch {
+        toast.error("No se pudo activar el biométrico");
+      }
+    }
+  };
+
   return (
     <div>
       {/* Header */}
@@ -102,6 +120,20 @@ const Profile = () => {
 
         {/* Settings */}
         <div className="bg-card rounded-2xl shadow-card overflow-hidden mb-8">
+          {isAvailable && (
+            <button
+              onClick={handleToggleBiometric}
+              className="w-full flex items-center gap-3 px-4 py-4 border-b border-border hover:bg-muted transition-colors"
+            >
+              <Fingerprint size={20} className="text-primary" />
+              <span className="flex-1 text-left font-semibold text-sm text-foreground">
+                Ingreso Biométrico
+              </span>
+              <span className={`text-xs font-bold px-2 py-1 rounded-lg ${isEnabled ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+                {isEnabled ? "Activado" : "Desactivado"}
+              </span>
+            </button>
+          )}
           {[
             { icon: Bell, label: "Notificaciones", color: "text-primary", action: () => {} },
             { icon: Shield, label: "Privacidad", color: "text-primary", action: () => {} },
