@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Mail, Lock, User, Eye, EyeOff, Building2 } from "lucide-react";
+import { Mail, Lock, User, Eye, EyeOff, Building2, Fingerprint } from "lucide-react";
 import puntualometroLogo from "@/assets/puntualometro-logo.jpeg";
+import { useBiometric } from "@/hooks/useBiometric";
+import { toast } from "sonner";
 
 type Mode = "login" | "signup";
 
@@ -14,6 +16,35 @@ const AuthScreen = () => {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "error" | "success"; text: string } | null>(null);
+  const { isAvailable, isEnabled, authenticate } = useBiometric();
+  const [biometricLoading, setBiometricLoading] = useState(false);
+
+  // Auto-attempt biometric on mount if enabled
+  useEffect(() => {
+    if (isEnabled && isAvailable) {
+      handleBiometricLogin();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEnabled, isAvailable]);
+
+  const handleBiometricLogin = async () => {
+    setBiometricLoading(true);
+    try {
+      const result = await authenticate();
+      if (result) {
+        // Biometric passed — Supabase session should still be active from persistSession
+        const { data } = await supabase.auth.getSession();
+        if (data.session) {
+          toast.success("¡Bienvenido de vuelta!");
+        } else {
+          toast.error("Sesión expirada. Inicia sesión con tu correo.");
+        }
+      }
+    } catch {
+      toast.error("No se pudo verificar biométrico");
+    }
+    setBiometricLoading(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,6 +90,20 @@ const AuthScreen = () => {
 
       {/* Form card */}
       <div className="flex-1 bg-background px-5 -mt-6 rounded-t-3xl pt-8">
+        {/* Biometric login button */}
+        {isAvailable && isEnabled && mode === "login" && (
+          <button
+            onClick={handleBiometricLogin}
+            disabled={biometricLoading}
+            className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl bg-card border-2 border-primary shadow-card mb-5 disabled:opacity-60 transition-all active:scale-[0.98]"
+          >
+            <Fingerprint size={28} className="text-primary" />
+            <span className="text-primary font-bold text-base">
+              {biometricLoading ? "Verificando…" : "Ingresar con Biométrico"}
+            </span>
+          </button>
+        )}
+
         {/* Tab switcher */}
         <div className="bg-muted rounded-2xl p-1.5 grid grid-cols-2 gap-1 mb-6">
           {(["login", "signup"] as Mode[]).map((m) => (
