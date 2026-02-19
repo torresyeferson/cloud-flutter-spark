@@ -1,19 +1,53 @@
 import { useState } from "react";
 import { QrCode, MapPin, Hash, CheckCircle2, Clock } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 type Method = "qr" | "gps" | "code";
 type CheckState = "idle" | "success";
 
 const CheckIn = () => {
+  const { user } = useAuth();
   const [method, setMethod] = useState<Method>("qr");
   const [code, setCode] = useState("");
   const [checkState, setCheckState] = useState<CheckState>("idle");
   const [semaphore, setSemaphore] = useState<"green" | "yellow" | "red" | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleCheckIn = () => {
-    // Simulate check-in with random semaphore
+  const handleCheckIn = async () => {
+    if (!user) return;
+    setLoading(true);
+
+    // Simulate semaphore result
     const options = ["green", "yellow", "red"] as const;
     const result = options[Math.floor(Math.random() * 3)];
+    const resultMap = { green: "verde", yellow: "amarillo", red: "rojo" } as const;
+    const pointsMap = { green: 10, yellow: 5, red: 0 } as const;
+
+    // Get user's institution from profile
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("institution")
+      .eq("user_id", user.id)
+      .single();
+
+    const institution = profile?.institution || "Sin institución";
+
+    const { error } = await supabase.from("check_ins").insert({
+      user_id: user.id,
+      institution,
+      result: resultMap[result],
+      points: pointsMap[result],
+    });
+
+    setLoading(false);
+
+    if (error) {
+      toast.error("Error al registrar check-in");
+      return;
+    }
+
     setSemaphore(result);
     setCheckState("success");
   };
@@ -119,9 +153,10 @@ const CheckIn = () => {
             </div>
             <button
               onClick={handleCheckIn}
-              className="w-full py-4 rounded-2xl gradient-hero text-primary-foreground font-bold text-lg shadow-primary"
+              disabled={loading}
+              className="w-full py-4 rounded-2xl gradient-hero text-primary-foreground font-bold text-lg shadow-primary disabled:opacity-40"
             >
-              Simular Escaneo QR
+              {loading ? "Registrando…" : "Simular Escaneo QR"}
             </button>
           </div>
         )}
@@ -140,9 +175,10 @@ const CheckIn = () => {
             </div>
             <button
               onClick={handleCheckIn}
-              className="w-full py-4 rounded-2xl gradient-hero text-primary-foreground font-bold text-lg shadow-primary"
+              disabled={loading}
+              className="w-full py-4 rounded-2xl gradient-hero text-primary-foreground font-bold text-lg shadow-primary disabled:opacity-40"
             >
-              Registrar por GPS
+              {loading ? "Registrando…" : "Registrar por GPS"}
             </button>
           </div>
         )}
@@ -160,10 +196,10 @@ const CheckIn = () => {
             />
             <button
               onClick={handleCheckIn}
-              disabled={!code}
+              disabled={!code || loading}
               className="w-full py-4 rounded-2xl gradient-hero text-primary-foreground font-bold text-lg shadow-primary disabled:opacity-40"
             >
-              Registrar Asistencia
+              {loading ? "Registrando…" : "Registrar Asistencia"}
             </button>
           </div>
         )}

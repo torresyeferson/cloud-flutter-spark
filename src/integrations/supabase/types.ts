@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      check_ins: {
+        Row: {
+          check_in_time: string
+          created_at: string
+          id: string
+          institution: string
+          points: number
+          result: string
+          user_id: string
+        }
+        Insert: {
+          check_in_time?: string
+          created_at?: string
+          id?: string
+          institution: string
+          points?: number
+          result: string
+          user_id: string
+        }
+        Update: {
+          check_in_time?: string
+          created_at?: string
+          id?: string
+          institution?: string
+          points?: number
+          result?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -49,7 +79,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_institution_ranking: {
+        Args: never
+        Returns: {
+          institution: string
+          members: number
+          on_time_checkins: number
+          pct: number
+          total_checkins: number
+          total_points: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
