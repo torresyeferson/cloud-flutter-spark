@@ -2,10 +2,11 @@ import { useState } from "react";
 import Dashboard from "./Dashboard";
 import CheckIn from "./CheckIn";
 import Ranking from "./Ranking";
+import Events from "./Events";
 import Profile from "./Profile";
 import BottomNav from "./BottomNav";
 
-export type Tab = "dashboard" | "checkin" | "ranking" | "profile";
+export type Tab = "dashboard" | "checkin" | "events" | "ranking" | "profile";
 
 const AppShell = () => {
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
@@ -14,6 +15,7 @@ const AppShell = () => {
     switch (activeTab) {
       case "dashboard": return <Dashboard />;
       case "checkin": return <CheckIn />;
+      case "events": return <Events />;
       case "ranking": return <Ranking />;
       case "profile": return <Profile />;
     }

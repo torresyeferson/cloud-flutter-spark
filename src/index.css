@@ -116,6 +116,13 @@
     min-height: 100vh;
     margin: 0 auto;
   }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 }
 
 /* Animated pulse for streak */
