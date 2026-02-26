@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           check_in_time: string
           created_at: string
+          event_id: string | null
           id: string
           institution: string
           points: number
@@ -27,6 +28,7 @@ export type Database = {
         Insert: {
           check_in_time?: string
           created_at?: string
+          event_id?: string | null
           id?: string
           institution: string
           points?: number
@@ -36,11 +38,56 @@ export type Database = {
         Update: {
           check_in_time?: string
           created_at?: string
+          event_id?: string | null
           id?: string
           institution?: string
           points?: number
           result?: string
           user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "check_ins_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      events: {
+        Row: {
+          created_at: string
+          created_by: string
+          description: string | null
+          end_time: string
+          event_type: string
+          id: string
+          institution: string
+          start_time: string
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          description?: string | null
+          end_time: string
+          event_type: string
+          id?: string
+          institution: string
+          start_time: string
+          title: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          end_time?: string
+          event_type?: string
+          id?: string
+          institution?: string
+          start_time?: string
+          title?: string
         }
         Relationships: []
       }

@@ -1,4 +1,4 @@
-import { Clock, QrCode, Trophy, User } from "lucide-react";
+import { Clock, QrCode, Calendar, Trophy, User } from "lucide-react";
 import { Tab } from "./AppShell";
 
 interface BottomNavProps {
@@ -9,6 +9,7 @@ interface BottomNavProps {
 const tabs = [
   { id: "dashboard" as Tab, label: "Inicio", icon: Clock },
   { id: "checkin" as Tab, label: "Check-In", icon: QrCode },
+  { id: "events" as Tab, label: "Eventos", icon: Calendar },
   { id: "ranking" as Tab, label: "Ranking", icon: Trophy },
   { id: "profile" as Tab, label: "Perfil", icon: User },
 ];
