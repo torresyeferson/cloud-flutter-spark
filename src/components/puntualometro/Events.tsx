@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Calendar, Plus, Users, Clock, ChevronRight, Tag } from "lucide-react";
+import { Calendar, Plus, Users, Clock, ChevronRight, Tag, MapPin, Navigation } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -26,13 +26,25 @@ interface EventRow {
   description: string | null;
   created_by: string;
   created_at: string;
+  latitude: number | null;
+  longitude: number | null;
+  address: string | null;
 }
 
 interface EventStats {
   total: number;
   on_time: number;
   late: number;
+  tolerance: number;
   pct: number;
+}
+
+function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 const Events = () => {
@@ -43,6 +55,8 @@ const Events = () => {
   const [selectedEvent, setSelectedEvent] = useState<EventRow | null>(null);
   const [eventStats, setEventStats] = useState<EventStats | null>(null);
   const [filterType, setFilterType] = useState<string>("all");
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [showNearby, setShowNearby] = useState(false);
 
   // Form state
   const [title, setTitle] = useState("");
@@ -50,10 +64,21 @@ const Events = () => {
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [description, setDescription] = useState("");
+  const [formLocation, setFormLocation] = useState<{ lat: number; lng: number; address: string } | null>(null);
+  const [gettingLocation, setGettingLocation] = useState(false);
 
   useEffect(() => {
     fetchEvents();
+    getUserLocation();
   }, []);
+
+  const getUserLocation = () => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => {}
+    );
+  };
 
   const fetchEvents = async () => {
     setLoading(true);
@@ -61,7 +86,7 @@ const Events = () => {
       .from("events")
       .select("*")
       .order("start_time", { ascending: false });
-    if (!error && data) setEvents(data);
+    if (!error && data) setEvents(data as EventRow[]);
     setLoading(false);
   };
 
@@ -74,10 +99,12 @@ const Events = () => {
       const total = data.length;
       const on_time = data.filter((c) => c.result === "verde").length;
       const late = data.filter((c) => c.result === "rojo").length;
+      const tolerance = data.filter((c) => c.result === "amarillo").length;
       setEventStats({
         total,
         on_time,
         late,
+        tolerance,
         pct: total > 0 ? Math.round((on_time / total) * 100) : 0,
       });
     }
@@ -88,12 +115,34 @@ const Events = () => {
     fetchEventStats(ev.id);
   };
 
+  const requestFormLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error("Tu dispositivo no soporta geolocalización");
+      return;
+    }
+    setGettingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setFormLocation({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          address: `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`,
+        });
+        setGettingLocation(false);
+        toast.success("Ubicación obtenida");
+      },
+      () => {
+        setGettingLocation(false);
+        toast.error("No se pudo obtener la ubicación");
+      }
+    );
+  };
+
   const handleCreate = async () => {
     if (!user || !title || !eventType || !startTime || !endTime) {
       toast.error("Completa todos los campos obligatorios");
       return;
     }
-    // Get user institution
     const { data: profile } = await supabase
       .from("profiles")
       .select("institution")
@@ -108,6 +157,9 @@ const Events = () => {
       description: description || null,
       created_by: user.id,
       institution: profile?.institution || "Sin institución",
+      latitude: formLocation?.lat || null,
+      longitude: formLocation?.lng || null,
+      address: formLocation?.address || null,
     });
     if (error) {
       toast.error("Error al crear evento");
@@ -119,14 +171,33 @@ const Events = () => {
       setStartTime("");
       setEndTime("");
       setDescription("");
+      setFormLocation(null);
       fetchEvents();
     }
   };
 
   const typeInfo = (type: string) => EVENT_TYPES.find((t) => t.value === type);
 
-  const filtered = filterType === "all" ? events : events.filter((e) => e.event_type === filterType);
+  const filtered = (() => {
+    let list = filterType === "all" ? events : events.filter((e) => e.event_type === filterType);
+    if (showNearby && userLocation) {
+      list = list
+        .filter((e) => e.latitude != null && e.longitude != null)
+        .sort((a, b) => {
+          const dA = getDistanceKm(userLocation.lat, userLocation.lng, a.latitude!, a.longitude!);
+          const dB = getDistanceKm(userLocation.lat, userLocation.lng, b.latitude!, b.longitude!);
+          return dA - dB;
+        });
+    }
+    return list;
+  })();
 
+  const getEventDistance = (ev: EventRow) => {
+    if (!userLocation || ev.latitude == null || ev.longitude == null) return null;
+    return getDistanceKm(userLocation.lat, userLocation.lng, ev.latitude, ev.longitude);
+  };
+
+  // === Event detail view ===
   if (selectedEvent) {
     const ti = typeInfo(selectedEvent.event_type);
     return (
@@ -173,6 +244,25 @@ const Events = () => {
             </div>
           </div>
 
+          {/* Ubicación */}
+          {selectedEvent.address && (
+            <div className="bg-card rounded-2xl p-4 shadow-card">
+              <h3 className="font-bold text-foreground mb-2 flex items-center gap-2">
+                <MapPin size={18} className="text-primary" /> Ubicación
+              </h3>
+              <p className="text-sm text-muted-foreground">{selectedEvent.address}</p>
+              {(() => {
+                const d = getEventDistance(selectedEvent);
+                if (d == null) return null;
+                return (
+                  <p className="text-xs text-primary font-bold mt-1">
+                    📍 A {d < 1 ? `${Math.round(d * 1000)} metros` : `${d.toFixed(1)} km`} de ti
+                  </p>
+                );
+              })()}
+            </div>
+          )}
+
           {/* Asistencia */}
           <div className="bg-card rounded-2xl p-4 shadow-card">
             <h3 className="font-bold text-foreground mb-3 flex items-center gap-2">
@@ -191,7 +281,7 @@ const Events = () => {
                     </div>
                     <div className="rounded-xl p-3 text-center" style={{ background: "hsl(var(--tolerance) / 0.15)" }}>
                       <span className="text-2xl">🟡</span>
-                      <p className="text-2xl font-black text-foreground mt-1">{eventStats.total - eventStats.on_time - eventStats.late}</p>
+                      <p className="text-2xl font-black text-foreground mt-1">{eventStats.tolerance}</p>
                       <p className="text-xs text-muted-foreground font-semibold">Tolerancia</p>
                     </div>
                     <div className="rounded-xl p-3 text-center" style={{ background: "hsl(var(--late) / 0.15)" }}>
@@ -201,7 +291,6 @@ const Events = () => {
                     </div>
                   </div>
 
-                  {/* Porcentaje de puntualidad */}
                   <div className="bg-primary/5 rounded-xl p-3">
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-sm font-semibold text-foreground">Puntualidad</span>
@@ -237,6 +326,7 @@ const Events = () => {
     );
   }
 
+  // === Events list view ===
   return (
     <div>
       <div className="gradient-hero px-5 pt-12 pb-6">
@@ -245,13 +335,29 @@ const Events = () => {
             <p className="text-primary-foreground/70 text-sm">Agenda</p>
             <h1 className="text-primary-foreground text-2xl font-bold">Eventos</h1>
           </div>
-          <button
-            onClick={() => setShowForm(!showForm)}
-            className="w-10 h-10 rounded-full bg-primary-foreground/20 flex items-center justify-center text-primary-foreground"
-          >
-            <Plus size={22} />
-          </button>
+          <div className="flex items-center gap-2">
+            {userLocation && (
+              <button
+                onClick={() => setShowNearby(!showNearby)}
+                className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                  showNearby ? "bg-primary-foreground text-primary" : "bg-primary-foreground/20 text-primary-foreground"
+                }`}
+              >
+                <Navigation size={18} />
+              </button>
+            )}
+            <button
+              onClick={() => setShowForm(!showForm)}
+              className="w-10 h-10 rounded-full bg-primary-foreground/20 flex items-center justify-center text-primary-foreground"
+            >
+              <Plus size={22} />
+            </button>
+          </div>
         </div>
+
+        {showNearby && (
+          <p className="text-primary-foreground/80 text-xs font-semibold mb-2">📍 Mostrando eventos cercanos a tu ubicación</p>
+        )}
 
         {/* Filter chips */}
         <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
@@ -307,6 +413,32 @@ const Events = () => {
                 </div>
               </div>
               <Input placeholder="Descripción (opcional)" value={description} onChange={(e) => setDescription(e.target.value)} className="rounded-xl" />
+
+              {/* Location */}
+              <div>
+                {formLocation ? (
+                  <div className="bg-primary-light rounded-xl p-3 flex items-center gap-2">
+                    <MapPin size={16} className="text-primary flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-xs text-primary font-bold">Ubicación registrada</p>
+                      <p className="text-xs text-muted-foreground">{formLocation.address}</p>
+                    </div>
+                    <button onClick={() => setFormLocation(null)} className="text-xs text-muted-foreground">✕</button>
+                  </div>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={requestFormLocation}
+                    disabled={gettingLocation}
+                    className="w-full rounded-xl gap-2"
+                  >
+                    <MapPin size={16} />
+                    {gettingLocation ? "Obteniendo ubicación…" : "Agregar ubicación"}
+                  </Button>
+                )}
+              </div>
+
               <Button onClick={handleCreate} className="w-full rounded-xl font-bold">
                 Crear Evento
               </Button>
@@ -329,6 +461,7 @@ const Events = () => {
               const ti = typeInfo(ev.event_type);
               const start = new Date(ev.start_time);
               const end = new Date(ev.end_time);
+              const dist = getEventDistance(ev);
               return (
                 <button
                   key={ev.id}
@@ -343,6 +476,11 @@ const Events = () => {
                     <div className="flex items-center gap-2 mt-0.5">
                       <Tag size={12} className="text-muted-foreground" />
                       <span className="text-xs text-muted-foreground font-semibold">{ti?.label}</span>
+                      {dist != null && (
+                        <span className="text-xs text-primary font-bold">
+                          📍 {dist < 1 ? `${Math.round(dist * 1000)}m` : `${dist.toFixed(1)}km`}
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
                       <Clock size={12} className="text-primary" />

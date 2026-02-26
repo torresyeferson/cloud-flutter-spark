@@ -57,6 +57,7 @@ export type Database = {
       }
       events: {
         Row: {
+          address: string | null
           created_at: string
           created_by: string
           description: string | null
@@ -64,10 +65,13 @@ export type Database = {
           event_type: string
           id: string
           institution: string
+          latitude: number | null
+          longitude: number | null
           start_time: string
           title: string
         }
         Insert: {
+          address?: string | null
           created_at?: string
           created_by: string
           description?: string | null
@@ -75,10 +79,13 @@ export type Database = {
           event_type: string
           id?: string
           institution: string
+          latitude?: number | null
+          longitude?: number | null
           start_time: string
           title: string
         }
         Update: {
+          address?: string | null
           created_at?: string
           created_by?: string
           description?: string | null
@@ -86,6 +93,8 @@ export type Database = {
           event_type?: string
           id?: string
           institution?: string
+          latitude?: number | null
+          longitude?: number | null
           start_time?: string
           title?: string
         }
