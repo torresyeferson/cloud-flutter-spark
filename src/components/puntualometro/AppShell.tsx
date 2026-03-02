@@ -5,11 +5,13 @@ import Ranking from "./Ranking";
 import Events from "./Events";
 import Profile from "./Profile";
 import BottomNav from "./BottomNav";
+import { useEventReminders } from "@/hooks/useEventReminders";
 
 export type Tab = "dashboard" | "checkin" | "events" | "ranking" | "profile";
 
 const AppShell = () => {
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
+  useEventReminders();
 
   const renderScreen = () => {
     switch (activeTab) {
