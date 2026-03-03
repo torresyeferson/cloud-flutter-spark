@@ -1,21 +1,103 @@
+import { useEffect, useState } from "react";
 import puntualometroLogo from "@/assets/puntualometro-logo.jpeg";
-import { Award, Download, ChevronRight, Bell, Shield, LogOut, Fingerprint } from "lucide-react";
+import { Award, Download, ChevronRight, Bell, Shield, LogOut, Fingerprint, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBiometric } from "@/hooks/useBiometric";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+interface ProfileData {
+  fullName: string;
+  initials: string;
+  roleTitle: string;
+  institution: string;
+  pct: number;
+  streak: number;
+  points: number;
+  level: string;
+}
 
-const historial = [
-  { date: "Lun 17 Feb", event: "Reunión Semanal", status: "🟢", pts: "+10" },
-  { date: "Mar 18 Feb", event: "Capacitación", status: "🟢", pts: "+10" },
-  { date: "Mié 19 Feb", event: "Asamblea", status: "🟡", pts: "+5" },
-  { date: "Jue 20 Feb", event: "Taller Digital", status: "🟢", pts: "+10" },
-  { date: "Vie 21 Feb", event: "Reunión Eq.", status: "🔴", pts: "0" },
-];
+interface HistoryItem {
+  id: string;
+  check_in_time: string;
+  result: string;
+  points: number;
+  event_id: string | null;
+  eventTitle: string;
+}
 
 const Profile = () => {
   const { signOut, user } = useAuth();
   const { isAvailable, isEnabled, register, disable } = useBiometric();
+  const [profileData, setProfileData] = useState<ProfileData | null>(null);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (user) fetchProfileData();
+  }, [user]);
+
+  const fetchProfileData = async () => {
+    if (!user) return;
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name, role_title, institution")
+      .eq("user_id", user.id)
+      .single();
+
+    const { data: checkIns } = await supabase
+      .from("check_ins")
+      .select("id, result, points, check_in_time, event_id")
+      .eq("user_id", user.id)
+      .order("check_in_time", { ascending: false });
+
+    const fullName = profile?.full_name || user.user_metadata?.full_name || "Usuario";
+    const initials = fullName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+    const totalPoints = (checkIns || []).reduce((s, c) => s + (c.points || 0), 0);
+    const total = (checkIns || []).length;
+    const onTime = (checkIns || []).filter(c => c.result === "verde").length;
+    const pct = total > 0 ? Math.round((onTime / total) * 100) : 0;
+
+    let streak = 0;
+    for (const c of (checkIns || [])) {
+      if (c.result === "verde") streak++;
+      else break;
+    }
+
+    let level = "Responsable";
+    if (pct >= 95) level = "Excelencia FUNCAJE";
+    else if (pct >= 80) level = "Ejemplar";
+
+    setProfileData({
+      fullName,
+      initials,
+      roleTitle: profile?.role_title || "Miembro",
+      institution: profile?.institution || "",
+      pct, streak, points: totalPoints, level,
+    });
+
+    // Fetch recent history with event titles
+    const recent = (checkIns || []).slice(0, 5);
+    const eventIds = recent.filter(c => c.event_id).map(c => c.event_id!);
+    let eventMap: Record<string, string> = {};
+    if (eventIds.length > 0) {
+      const { data: events } = await supabase
+        .from("events")
+        .select("id, title")
+        .in("id", eventIds);
+      if (events) {
+        eventMap = Object.fromEntries(events.map(e => [e.id, e.title]));
+      }
+    }
+
+    setHistory(recent.map(c => ({
+      ...c,
+      eventTitle: c.event_id ? (eventMap[c.event_id] || "Evento") : "Check-in manual",
+    })));
+
+    setLoading(false);
+  };
 
   const handleToggleBiometric = async () => {
     if (isEnabled) {
@@ -24,12 +106,25 @@ const Profile = () => {
     } else if (user) {
       try {
         await register(user.id, user.email || "", user.user_metadata?.full_name || "Usuario");
-        toast.success("¡Biométrico activado! Podrás ingresar con huella o Face ID.");
+        toast.success("¡Biométrico activado!");
       } catch {
         toast.error("No se pudo activar el biométrico");
       }
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="animate-spin text-primary" size={32} />
+      </div>
+    );
+  }
+
+  if (!profileData) return null;
+
+  const resultEmoji: Record<string, string> = { verde: "🟢", amarillo: "🟡", rojo: "🔴" };
+  const resultPts = (r: string, p: number) => r === "rojo" ? "0" : `+${p}`;
 
   return (
     <div>
@@ -37,14 +132,14 @@ const Profile = () => {
       <div className="gradient-hero px-5 pt-12 pb-8">
         <div className="flex items-center gap-4">
           <div className="w-20 h-20 rounded-2xl gradient-gold flex items-center justify-center text-3xl font-black text-primary-foreground shadow-gold pulse-gold">
-            MG
+            {profileData.initials}
           </div>
           <div>
-            <h1 className="text-primary-foreground text-xl font-black">María González</h1>
-            <p className="text-primary-foreground/70 text-sm">Coordinadora Educativa</p>
+            <h1 className="text-primary-foreground text-xl font-black">{profileData.fullName}</h1>
+            <p className="text-primary-foreground/70 text-sm">{profileData.roleTitle}</p>
             <div className="flex items-center gap-1.5 mt-1">
               <Award size={14} className="text-secondary" />
-              <span className="text-secondary text-sm font-bold">Nivel Ejemplar</span>
+              <span className="text-secondary text-sm font-bold">Nivel {profileData.level}</span>
             </div>
           </div>
         </div>
@@ -54,9 +149,9 @@ const Profile = () => {
         {/* Stats */}
         <div className="grid grid-cols-3 gap-3 mb-5">
           {[
-            { label: "Puntualidad", value: "87%" },
-            { label: "Racha", value: "12 🔥" },
-            { label: "Puntos", value: "1.240" },
+            { label: "Puntualidad", value: `${profileData.pct}%` },
+            { label: "Racha", value: `${profileData.streak} 🔥` },
+            { label: "Puntos", value: profileData.points.toLocaleString() },
           ].map((s) => (
             <div key={s.label} className="bg-card rounded-2xl p-3 shadow-card text-center">
               <p className="text-xl font-black text-primary">{s.value}</p>
@@ -64,7 +159,6 @@ const Profile = () => {
             </div>
           ))}
         </div>
-
 
         {/* Certificate Download */}
         <button className="w-full bg-card rounded-2xl p-4 shadow-card mb-4 flex items-center gap-3 hover:bg-primary-light transition-colors">
@@ -81,16 +175,24 @@ const Profile = () => {
         {/* History */}
         <div className="bg-card rounded-2xl p-4 shadow-card mb-4">
           <h3 className="font-bold text-foreground mb-3">Historial Reciente</h3>
-          {historial.map((h) => (
-            <div key={h.date} className="flex items-center gap-3 py-2.5 border-b border-border last:border-0">
-              <span className="text-base">{h.status}</span>
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-foreground">{h.event}</p>
-                <p className="text-xs text-muted-foreground">{h.date}</p>
+          {history.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-3">Sin registros aún</p>
+          ) : (
+            history.map((h) => (
+              <div key={h.id} className="flex items-center gap-3 py-2.5 border-b border-border last:border-0">
+                <span className="text-base">{resultEmoji[h.result] || "⚪"}</span>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-foreground">{h.eventTitle}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(h.check_in_time).toLocaleDateString("es", { weekday: "short", day: "numeric", month: "short" })}
+                  </p>
+                </div>
+                <span className={`text-sm font-black ${h.result === "rojo" ? "text-late" : "text-ontime"}`}>
+                  {resultPts(h.result, h.points)}
+                </span>
               </div>
-              <span className={`text-sm font-black ${h.pts === "0" ? "text-late" : "text-ontime"}`}>{h.pts}</span>
-            </div>
-          ))}
+            ))
+          )}
         </div>
 
         {/* Settings */}
@@ -101,9 +203,7 @@ const Profile = () => {
               className="w-full flex items-center gap-3 px-4 py-4 border-b border-border hover:bg-muted transition-colors"
             >
               <Fingerprint size={20} className="text-primary" />
-              <span className="flex-1 text-left font-semibold text-sm text-foreground">
-                Ingreso Biométrico
-              </span>
+              <span className="flex-1 text-left font-semibold text-sm text-foreground">Ingreso Biométrico</span>
               <span className={`text-xs font-bold px-2 py-1 rounded-lg ${isEnabled ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
                 {isEnabled ? "Activado" : "Desactivado"}
               </span>
