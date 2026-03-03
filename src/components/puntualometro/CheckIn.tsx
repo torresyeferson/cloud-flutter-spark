@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
-import { QrCode, MapPin, Hash, Clock, ChevronDown } from "lucide-react";
+import { QrCode, MapPin, Hash, Clock, ChevronDown, Camera } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import QrScanner from "./QrScanner";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 type Method = "qr" | "gps" | "code";
-type CheckState = "idle" | "success";
+type CheckState = "idle" | "scanning" | "success";
 
 interface EventOption {
   id: string;
@@ -231,21 +232,48 @@ const CheckIn = () => {
         </div>
 
         {/* QR Panel */}
-        {method === "qr" && (
+        {method === "qr" && checkState === "idle" && (
           <div className="bg-card rounded-2xl p-6 shadow-card text-center mb-6">
             <div className="w-52 h-52 mx-auto rounded-2xl bg-muted flex items-center justify-center mb-4 border-4 border-dashed border-border">
               <div className="text-center text-muted-foreground">
                 <QrCode size={48} className="mx-auto mb-2 text-primary" />
-                <p className="text-sm font-semibold">Apunta al código QR</p>
+                <p className="text-sm font-semibold">Escanea un código QR</p>
                 <p className="text-xs">del evento o clase</p>
               </div>
             </div>
             <button
-              onClick={handleCheckIn}
-              disabled={loading}
-              className="w-full py-4 rounded-2xl gradient-hero text-primary-foreground font-bold text-lg shadow-primary disabled:opacity-40"
+              onClick={() => setCheckState("scanning")}
+              className="w-full py-4 rounded-2xl gradient-hero text-primary-foreground font-bold text-lg shadow-primary flex items-center justify-center gap-2"
             >
-              {loading ? "Registrando…" : "Simular Escaneo QR"}
+              <Camera size={20} />
+              Abrir Cámara
+            </button>
+          </div>
+        )}
+
+        {/* QR Scanner Active */}
+        {method === "qr" && checkState === "scanning" && (
+          <div className="bg-card rounded-2xl p-6 shadow-card text-center mb-6">
+            <p className="text-sm font-bold text-foreground mb-3">Apunta la cámara al código QR</p>
+            <QrScanner
+              onScan={(data) => {
+                // Try to find event by ID or title from scanned data
+                const matchedEvent = events.find(
+                  (e) => e.id === data || e.title.toLowerCase() === data.toLowerCase()
+                );
+                if (matchedEvent) {
+                  setSelectedEventId(matchedEvent.id);
+                }
+                setCheckState("idle");
+                handleCheckIn();
+              }}
+              onError={() => {}}
+            />
+            <button
+              onClick={() => setCheckState("idle")}
+              className="mt-4 w-full py-3 rounded-xl border border-border text-sm font-bold text-muted-foreground"
+            >
+              Cancelar
             </button>
           </div>
         )}
